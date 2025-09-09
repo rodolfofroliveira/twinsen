@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wisstek | TwinSEN Dashboard</title>
+    
+    <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+    
+    <style>
+      :root {
+        --cor-fundo: #f4f7f9; --cor-container: #ffffff; --cor-texto-principal: #2c3e50;
+        --cor-texto-secundario: #5a738b; --cor-borda: #dee7f0; --sombra: 0 8px 24px rgba(21, 48, 71, 0.08);
+        --cor-primaria: #3498db; --cor-sucesso: #2ecc71; --cor-aviso: #f1c40f; --cor-perigo: #e74c3c;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* A fonte 'Roboto' foi removida, o navegador usará 'sans-serif' como fallback */
+      body { font-family: sans-serif; background-color: var(--cor-fundo); color: var(--cor-texto-principal); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+      .site-header { width: 100%; max-width: 1200px; display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; text-align: center; background: linear-gradient(to right, #2c3e50, #34495e); padding: 25px 20px; border-radius: 12px; box-shadow: var(--sombra); }
+      .logo { max-height: 60px; margin-bottom: 15px; }
+      .site-header h1 { font-size: 2em; font-weight: 700; color: #ffffff; }
+      main { width: 100%; max-width: 1200px; }
+      .main-content { display: flex; gap: 30px; width: 100%; }
+      .panel { background-color: var(--cor-container); border: 1px solid var(--cor-borda); border-radius: 12px; padding: 25px; box-shadow: var(--sombra); display: flex; flex-direction: column; }
+      .panel h2 { font-size: 1.5em; margin-bottom: 10px; color: var(--cor-texto-principal); border-bottom: 2px solid var(--cor-primaria); padding-bottom: 10px; }
+      .panel-subtitle { font-size: 0.9em; color: var(--cor-texto-secundario); margin-bottom: 20px; text-align: left; }
+      .panel-subtitle span { font-weight: 700; color: var(--cor-primaria); }
+      .control-panel { flex: 1; }
+      #circuito-container svg { width: 100%; height: auto; margin-top: 20px; }
+      .monitoring-panel { flex: 1; }
+      .latest-value-display { background-color: #f8f9fa; border: 1px solid var(--cor-borda); border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 20px; }
+      .latest-value-display p { font-size: 1.1em; color: var(--cor-texto-secundario); margin-bottom: 10px; }
+      .latest-value-display span { font-size: 2.8em; font-weight: 700; color: var(--cor-primaria); }
+      .chart-container { position: relative; flex-grow: 1; min-height: 250px; }
+      .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+      .stat-card { background-color: #f8f9fa; border-radius: 8px; padding: 15px; text-align: center; border-bottom: 4px solid; }
+      .stat-card p { font-size: 0.9em; color: var(--cor-texto-secundario); margin-bottom: 8px; font-weight: 700; text-transform: uppercase; }
+      .stat-card span { font-size: 1.8em; font-weight: 700; }
+      .stat-card.mean { border-color: var(--cor-sucesso); } .stat-card.mean span { color: var(--cor-sucesso); }
+      .stat-card.max { border-color: var(--cor-perigo); } .stat-card.max span { color: var(--cor-perigo); }
+      .stat-card.min { border-color: var(--cor-aviso); } .stat-card.min span { color: var(--cor-aviso); }
+      .explanation-panel { margin-top: 30px; }
+      .explanation-panel p { font-size: 1.1em; line-height: 1.7; color: var(--cor-texto-secundario); }
+      .explanation-panel p:not(:last-child) { margin-bottom: 15px; }
+      #led-vermelho, #led-amarelo, #led-verde, #buzzer { transition: opacity 0.2s ease-in-out; }
+      #led-vermelho.ligado, #led-amarelo.ligado, #led-verde.ligado, #buzzer.ligado { opacity: 1 !important; }
+      #led-vermelho:not(.ligado), #led-amarelo:not(.ligado), #led-verde:not(.ligado), #buzzer:not(.ligado) { opacity: 0 !important; }
+      .site-footer { width: 100%; text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--cor-borda); color: var(--cor-texto-secundario); }
+      
+      .threshold-form { margin-top: 20px; display: flex; flex-direction: column; gap: 15px; }
+      .form-group { display: flex; flex-direction: column; }
+      .form-group label { margin-bottom: 5px; font-weight: 700; color: var(--cor-texto-secundario); }
+      .form-group input { padding: 10px; border-radius: 6px; border: 1px solid var(--cor-borda); font-size: 1em; }
+      #save-thresholds-btn { padding: 12px; background-color: var(--cor-primaria); color: white; border: none; border-radius: 6px; font-size: 1em; font-weight: 700; cursor: pointer; transition: background-color 0.2s; }
+      #save-thresholds-btn:hover { background-color: #2980b9; }
+      #save-status { margin-top: 10px; text-align: center; color: var(--cor-sucesso); font-weight: 700; height: 1em; }
+
+      @media (max-width: 900px) { .main-content { flex-direction: column; } }
+      @media (max-width: 500px) { .stats-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <img src="{{ url_for('static', filename='logo_wisstek.png') }}" alt="Logotipo Wisstek" class="logo">
+        <h1>TwinSEN | Dashboard de Controle e Monitoramento</h1>
+    </header>
+    <main>
+        <div class="main-content">
+            <section class="panel control-panel">
+                <h2>Painel de Controle</h2>
+                <p class="panel-subtitle">Configure os limiares de luminosidade para o controle automático dos atuadores.</p>
+                <div class="threshold-form">
+                    <div class="form-group">
+                        <label for="limiar-atencao-input">Limiar de Atenção (Amarelo)</label>
+                        <input type="number" id="limiar-atencao-input" placeholder="Ex: 700">
+                    </div>
+                    <div class="form-group">
+                        <label for="limiar-critico-input">Limiar Crítico (Vermelho)</label>
+                        <input type="number" id="limiar-critico-input" placeholder="Ex: 300">
+                    </div>
+                    <button id="save-thresholds-btn">Salvar Limiares</button>
+                    <div id="save-status"></div>
+                </div>
+                <div id="circuito-container">{{ svg_data }}</div>
+            </section>
+            <section class="panel monitoring-panel">
+                <h2>Dashboard de Monitoramento</h2>
+                <p class="panel-subtitle">Estatísticas baseadas nas últimas <span id="janela-valor">--</span> leituras.</p>
+                <div class="latest-value-display"><p>Última Leitura de Luminosidade</p><span id="latest-luminosity-value">--</span></div>
+                <div class="stats-grid">
+                    <div class="stat-card mean"><p>Média</p><span id="stats-mean">--</span></div>
+                    <div class="stat-card max"><p>Máximo</p><span id="stats-max">--</span></div>
+                    <div class="stat-card min"><p>Mínimo</p><span id="stats-min">--</span></div>
+                </div>
+                <div class="chart-container"><canvas id="luminosityChart"></canvas></div>
+            </section>
+        </div>
+        <section class="panel explanation-panel">
+            <h2>Sobre a plataforma TwinSEN</h2>
+            <p>Bem-vindo ao <strong>TwinSEN</strong>, uma plataforma integrada que cria um <strong>Gêmeo Digital</strong> (Digital Twin) do seu hardware no mundo real, inspirado na dualidade e na conexão.</p>
+            <p>O nome reflete a função principal do sistema: a união de dois mundos (<strong>Twin</strong>) através da tecnologia de <strong>Sensores</strong> (<strong>Sen</strong>). Aqui, o universo físico e o digital espelham-se perfeitamente. A interface web permite <strong>Sentir</strong> o ambiente com sensores remotos e <strong>Enviar</strong> comandos instantaneamente, unindo o controle e a visualização de dados em uma única experiência interativa.</p>
+        </section>
+    </main>
+    <footer class="site-footer"><p>&copy; 2025 Wisstek. Todos os direitos reservados.</p></footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Referências aos elementos do DOM ---
+            const initialData = {{ initial_data|tojson }};
+            const elementosInterativos = {
+                'led_verde': document.getElementById('led-verde'),
+                'led_amarelo': document.getElementById('led-amarelo'),
+                'led_vermelho': document.getElementById('led-vermelho'),
+                'buzzer': document.getElementById('buzzer')
+            };
+            const limiarAtencaoInput = document.getElementById('limiar-atencao-input');
+            const limiarCriticoInput = document.getElementById('limiar-critico-input');
+            const saveBtn = document.getElementById('save-thresholds-btn');
+            const saveStatusEl = document.getElementById('save-status');
+
+            const latestValueEl = document.getElementById('latest-luminosity-value');
+            const statsMeanEl = document.getElementById('stats-mean');
+            const statsMaxEl = document.getElementById('stats-max');
+            const statsMinEl = document.getElementById('stats-min');
+            const janelaValorEl = document.getElementById('janela-valor');
+
+            // --- Configuração do Gráfico ---
+            const ctx = document.getElementById('luminosityChart').getContext('2d');
+            const luminosityChart = new Chart(ctx, { 
+                type: 'line', data: { labels: [], datasets: [{ label: 'Luminosidade', data: [], borderColor: 'rgba(52, 152, 219, 1)', backgroundColor: 'rgba(52, 152, 219, 0.2)', borderWidth: 2, fill: true, tension: 0.4 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: 'Valor da Luminosidade' } }, x: { title: { display: true, text: 'Horário da Coleta' } } }, plugins: { legend: { display: false } } }
+            });
+
+            // --- Inicialização da Página ---
+            function initializeDashboard() {
+                // Popula os campos de limiar com os valores iniciais
+                limiarAtencaoInput.value = initialData.limiar_atencao || '';
+                limiarCriticoInput.value = initialData.limiar_critico || '';
+
+                // Define o estado visual inicial dos atuadores (sem clique!)
+                for (const key in elementosInterativos) {
+                    if (elementosInterativos[key] && initialData[key]) {
+                        elementosInterativos[key].classList.add('ligado');
+                    }
+                }
+            }
+
+            // --- Lógica de Salvamento dos Limiares ---
+            saveBtn.addEventListener('click', () => {
+                const atencao = limiarAtencaoInput.value;
+                const critico = limiarCriticoInput.value;
+
+                saveStatusEl.textContent = 'Salvando...';
+
+                fetch('/update_thresholds', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        limiar_atencao: atencao,
+                        limiar_critico: critico
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        saveStatusEl.textContent = 'Salvo com sucesso!';
+                    } else {
+                        saveStatusEl.textContent = `Erro: ${data.error}`;
+                        saveStatusEl.style.color = 'var(--cor-perigo)';
+                    }
+                    setTimeout(() => { 
+                        saveStatusEl.textContent = '';
+                        saveStatusEl.style.color = 'var(--cor-sucesso)';
+                    }, 3000);
+                })
+                .catch(err => {
+                    saveStatusEl.textContent = 'Erro de rede!';
+                    saveStatusEl.style.color = 'var(--cor-perigo)';
+                     setTimeout(() => { 
+                        saveStatusEl.textContent = '';
+                        saveStatusEl.style.color = 'var(--cor-sucesso)';
+                    }, 3000);
+                });
+            });
+
+            // --- Função Principal de Atualização do Dashboard ---
+            async function updateDashboard() {
+                // Atualiza o gráfico de luminosidade
+                try {
+                    const response = await fetch('/api/luminosidade');
+                    const data = await response.json();
+                    latestValueEl.textContent = data.latest_value;
+                    if(data.labels.length > 0){
+                        luminosityChart.data.labels = data.labels;
+                        luminosityChart.data.datasets[0].data = data.values;
+                        luminosityChart.update();
+                    }
+                } catch (error) { console.error("Erro ao buscar dados de luminosidade:", error); }
+
+                // Atualiza as estatísticas E o estado dos atuadores
+                try {
+                    const response = await fetch('/api/estatisticas');
+                    const data = await response.json();
+
+                    // Atualiza os cards de estatísticas
+                    janelaValorEl.textContent = data.janela_aplicacao || '--';
+                    statsMeanEl.textContent = data.Luminosidade_Media ? parseFloat(data.Luminosidade_Media).toFixed(2) : '--';
+                    statsMaxEl.textContent = data.Luminosidade_Max ? parseFloat(data.Luminosidade_Max).toFixed(0) : '--';
+                    statsMinEl.textContent = data.Luminosidade_Min ? parseFloat(data.Luminosidade_Min).toFixed(0) : '--';
+
+                    // ATUALIZA O ESTADO VISUAL DOS ATUADORES
+                    for (const key in elementosInterativos) {
+                         if (elementosInterativos[key]) {
+                            elementosInterativos[key].classList.toggle('ligado', data[key]);
+                         }
+                    }
+                } catch (error) { console.error("Erro ao buscar dados de estatísticas:", error); }
+            }
+
+            // --- Inicia o processo ---
+            initializeDashboard();
+            setInterval(updateDashboard, 1000);
+            updateDashboard(); // Chama uma vez no início
+        });
+    </script>
+</body>
+</html>

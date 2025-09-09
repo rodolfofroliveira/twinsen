@@ -1,0 +1,26 @@
+nivel1:
+  ip: 192.168.0.23
+  porta: 8888
+nivel3:
+  ligado: true
+  intervalo_medicoes: 0.7
+nivel4:
+  diretorio_logs: nivel4
+  nome_arquivo_rede: dados_brutos_rede.csv
+  nome_arquivo_aplicacao: dados_brutos_aplicacao.csv
+  nome_arquivo_stats_rede: estatisticas_rede.csv
+  nome_arquivo_stats_aplicacao: estatisticas_aplicacao.csv
+nivel5:
+  ativado: true
+  intervalo_analise_s: 1
+  janela_aplicacao: 12
+  janela_rede: 12
+nivel6:
+  limiar_atencao: 200
+  limiar_critico: 100
+  led_verde: false
+  led_amarelo: true
+  led_vermelho: false
+  buzzer: false
+  luminosidade_atual: 168
+  ultima_atualizacao: '2025-09-08 21:05:31'
