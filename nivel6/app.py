@@ -1,13 +1,14 @@
-# nivel6/app.py
+# nivel6/app.py - Versão com Escrita Segura no YAML
 
 import os
 import yaml
 import csv
-import io # Usado para processar texto em memória
+import io
+import tempfile
 from flask import Flask, render_template, request, jsonify
 from markupsafe import Markup
-from collections import deque # Usado para ler as últimas linhas de um arquivo de forma eficiente
-from datetime import datetime # Usado para processar timestamps
+from collections import deque
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -20,12 +21,24 @@ CSV_RAW_PATH = os.path.join(NIVEL4_PATH, 'dados_brutos_aplicacao.csv')
 CSV_STATS_PATH = os.path.join(NIVEL4_PATH, 'estatisticas_aplicacao.csv')
 
 
+def salvar_yaml_seguro(caminho, dados):
+    """Escreve o YAML de forma atômica para evitar corrupção."""
+    dir_name = os.path.dirname(caminho)
+    try:
+        with tempfile.NamedTemporaryFile('w', dir=dir_name, delete=False, encoding="utf-8") as tmp:
+            yaml.dump(dados, tmp, default_flow_style=False, sort_keys=False)
+            temp_name = tmp.name
+        os.replace(temp_name, caminho)
+    except Exception as e:
+        print(f"Erro ao salvar o YAML de forma segura: {e}")
+
+
 # --- ROTA PRINCIPAL ---
 @app.route('/')
 def home():
     try:
         with open(YAML_PATH, 'r') as f:
-            config_data = yaml.safe_load(f)
+            config_data = yaml.safe_load(f) or {}
         initial_data = config_data.get('nivel6', {})
     except FileNotFoundError:
         return "Erro: O arquivo 'configuracoes.yaml' não foi encontrado!", 404
@@ -82,13 +95,15 @@ def update_thresholds():
     
     try:
         with open(YAML_PATH, 'r') as f:
-            config_data = yaml.safe_load(f)
+            config_data = yaml.safe_load(f) or {}
+
+        if 'nivel6' not in config_data:
+            config_data['nivel6'] = {}
 
         config_data['nivel6']['limiar_atencao'] = int(data['limiar_atencao'])
         config_data['nivel6']['limiar_critico'] = int(data['limiar_critico'])
 
-        with open(YAML_PATH, 'w') as f:
-            yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+        salvar_yaml_seguro(YAML_PATH, config_data)
             
         return jsonify(success=True, message="Limiares atualizados com sucesso!")
         
@@ -98,14 +113,14 @@ def update_thresholds():
         return jsonify(success=False, error=str(e)), 500
 
 
-# --- API PARA DADOS ESTATÍSTICOS (COM CORREÇÃO) ---
+# --- API PARA DADOS ESTATÍSTICOS ---
 @app.route('/api/estatisticas')
 def get_estatisticas_data():
     """Lê o YAML e a última linha do CSV, formatando os dados para exibição correta."""
     response_data = {}
     try:
         with open(YAML_PATH, 'r') as f:
-            config = yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
         response_data.update(config.get('nivel6', {}))
         response_data.update(config.get('nivel5', {}))
     except Exception as e:
@@ -123,29 +138,20 @@ def get_estatisticas_data():
         last_line_data = next(csv.reader(io.StringIO(last_line_str)))
         latest_stats_raw = dict(zip(header, last_line_data))
 
-        # --- INÍCIO DA MODIFICAÇÃO: Formatação de Saída ---
-        # Converte valores numéricos para strings formatadas para evitar o problema do "zero falsy" no JavaScript.
         latest_stats_converted = {}
         for key, value in latest_stats_raw.items():
             try:
                 numeric_value = float(value)
-                
-                # Formata os valores de estatística como texto
                 if key == 'Luminosidade_Media':
                     latest_stats_converted[key] = f"{numeric_value:.2f}"
                 elif key in ['Luminosidade_Min', 'Luminosidade_Max']:
                     latest_stats_converted[key] = f"{int(numeric_value)}"
                 else:
-                    # Mantém outros valores numéricos como estão (se houver)
                     latest_stats_converted[key] = numeric_value
-                    
             except (ValueError, TypeError):
-                # Mantém valores não numéricos (ex: Timestamp) como estão
                 latest_stats_converted[key] = value
         
         response_data.update(latest_stats_converted)
-        # --- FIM DA MODIFICAÇÃO ---
-        
         return jsonify(response_data)
 
     except FileNotFoundError:
@@ -157,6 +163,5 @@ def get_estatisticas_data():
 
 
 if __name__ == '__main__':
-    # Para um ambiente de produção, considere usar um servidor WSGI como waitress ou gunicorn
     app.run(host='0.0.0.0', port=5000, debug=False)
 

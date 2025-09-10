@@ -1,4 +1,4 @@
-# nivel5/analise.py
+# nivel5/analise.py - Versão com Escrita Segura preparada
 
 import os
 import time
@@ -7,9 +7,22 @@ import yaml
 import pandas as pd
 from collections import deque
 import io
+import tempfile
 
 # --- Configuração de Caminhos ---
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'nivel4', 'configuracoes.yaml')
+
+def salvar_yaml_seguro(caminho, dados):
+    """Escreve o YAML de forma atômica para evitar corrupção."""
+    dir_name = os.path.dirname(caminho)
+    try:
+        with tempfile.NamedTemporaryFile('w', dir=dir_name, delete=False, encoding="utf-8") as tmp:
+            yaml.dump(dados, tmp, default_flow_style=False, sort_keys=False)
+            temp_name = tmp.name
+        os.replace(temp_name, caminho)
+    except Exception as e:
+        print(f"Erro ao salvar o YAML de forma segura: {e}")
+
 
 def carregar_configuracoes():
     """Lê e retorna as configurações do arquivo YAML."""
@@ -22,6 +35,7 @@ def carregar_configuracoes():
     except yaml.YAMLError as e:
         print(f"ERRO: Formato inválido no arquivo YAML: {e}")
         return None
+
 
 def read_last_lines_as_dataframe(file_path, num_lines_to_read):
     """
@@ -84,8 +98,6 @@ def analisar_e_registrar(config):
 
         if not df_rede.empty:
             df_rede_ok = df_rede[df_rede['Status'] == 'Sucesso'].copy()
-            
-            # --- CORREÇÃO: Adicionado .copy() para evitar o SettingWithCopyWarning ---
             df_janela_rede = df_rede_ok.tail(janela_rede).copy()
 
             if not df_janela_rede.empty:
@@ -117,7 +129,6 @@ def analisar_e_registrar(config):
         df_app = read_last_lines_as_dataframe(path_app_bruto, linhas_a_ler_app)
         
         if not df_app.empty:
-            # --- CORREÇÃO: Adicionado .copy() para evitar o SettingWithCopyWarning ---
             df_janela_app = df_app.tail(janela_app).copy()
 
             if not df_janela_app.empty:

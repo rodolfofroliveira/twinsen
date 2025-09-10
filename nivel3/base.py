@@ -1,10 +1,11 @@
-# base.py - Versão Final com Reconfiguração Dinâmica de IP/Porta
+# base.py - Versão com Escrita Segura no YAML
 
 import socket
 import time
 import os
 import yaml
 import csv
+import tempfile
 from datetime import datetime
 
 # --- Funções Auxiliares---
@@ -20,6 +21,7 @@ def carregar_configuracoes(caminho_config):
     except yaml.YAMLError as e:
         print(f"Erro ao ler o arquivo YAML: {e}")
         return None
+
 
 def registrar_log_rede(caminho_log, timestamp, rssi, status):
     """Registra dados de rede (RSSI, status) em um arquivo CSV."""
@@ -47,26 +49,39 @@ def registrar_log_aplicacao(caminho_log, timestamp, luminosidade):
         print(f"Erro de I/O ao escrever no log de aplicação: {e}")
 
 
+def salvar_yaml_seguro(caminho, dados):
+    """Escreve o YAML de forma atômica para evitar corrupção."""
+    dir_name = os.path.dirname(caminho)
+    try:
+        with tempfile.NamedTemporaryFile('w', dir=dir_name, delete=False, encoding="utf-8") as tmp:
+            yaml.dump(dados, tmp, default_flow_style=False, sort_keys=False)
+            temp_name = tmp.name
+        os.replace(temp_name, caminho)
+    except Exception as e:
+        print(f"Erro ao salvar o YAML de forma segura: {e}")
+
+
 def atualizar_status_yaml(caminho_yaml, novos_estados):
-    """Lê o arquivo YAML, atualiza os estados no 'nivel6' e o reescreve."""
+    """Lê o arquivo YAML, atualiza os estados no 'nivel6' e o reescreve de forma segura."""
     try:
         with open(caminho_yaml, 'r') as f:
-            config_data = yaml.safe_load(f)
-        
+            config_data = yaml.safe_load(f) or {}
+
         if 'nivel6' not in config_data:
             config_data['nivel6'] = {}
-        
+
         config_data['nivel6']['led_verde'] = novos_estados.get('led_verde', config_data['nivel6'].get('led_verde'))
         config_data['nivel6']['led_amarelo'] = novos_estados.get('led_amarelo', config_data['nivel6'].get('led_amarelo'))
         config_data['nivel6']['led_vermelho'] = novos_estados.get('led_vermelho', config_data['nivel6'].get('led_vermelho'))
         config_data['nivel6']['buzzer'] = novos_estados.get('buzzer', config_data['nivel6'].get('buzzer'))
-        
+
         if 'luminosidade' in novos_estados:
-             config_data['nivel6']['luminosidade_atual'] = novos_estados['luminosidade']
+            config_data['nivel6']['luminosidade_atual'] = novos_estados['luminosidade']
+
         config_data['nivel6']['ultima_atualizacao'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        with open(caminho_yaml, 'w') as f:
-            yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+        salvar_yaml_seguro(caminho_yaml, config_data)
+
     except Exception as e:
         print(f"Erro ao atualizar o arquivo YAML: {e}")
 
@@ -132,18 +147,17 @@ def main():
             if new_port != current_port:
                 print(f"\n[INFO] Detectada mudança de porta. Reiniciando socket de {current_port} para {new_port}...")
                 try:
-                    udp_socket.close() # Fecha o socket antigo
-                    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # Cria um novo socket
+                    udp_socket.close()
+                    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                     udp_socket.settimeout(2.0)
-                    udp_socket.bind((HOST_LOCAL, new_port)) # Faz o bind na nova porta
-                    current_port = new_port # Atualiza a porta atual em uso
+                    udp_socket.bind((HOST_LOCAL, new_port))
+                    current_port = new_port
                     print(f"[INFO] Socket reconfigurado com sucesso para porta {current_port}.")
                 except OSError as e:
                     print(f"[ERRO] Falha ao reconfigurar para porta {new_port}: {e}. Tentando novamente no próximo ciclo.")
                     time.sleep(intervalo)
-                    continue # Pula esta iteração para tentar reconfigurar na próxima
+                    continue
 
-            # Atualiza o IP de destino (pode mudar independentemente da porta)
             current_ip = new_ip
             ENDERECO_SENSOR = (current_ip, current_port)
             # --- Fim da Modificação ---
@@ -221,3 +235,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
